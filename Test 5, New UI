@@ -1,0 +1,249 @@
+local function wrapThis(name)
+  local w, i = nil, 0
+  while w == nil and i <= 100 do
+    w = peripheral.wrap(name.."_"..i)
+    i = i + 1
+  end
+  return w
+end
+
+local r = wrapThis("BigReactors-Reactor")
+if r == nil then error("No reactor found") end
+
+local mon = peripheral.wrap("right")
+if mon == nil then error("No monitor found") end
+
+mon.setTextScale(1)
+
+local W, H = mon.getSize()
+
+local maxEnergy = 10000000
+local autoEnabled = true
+local targetPercent = 75
+local kp = 0.25
+local kd = 1.2
+local previousPercent = nil
+
+local normalCap = 5
+local dangerCap = 15
+local dangerThreshold = 35
+local sensitiveZoneStart = 70
+
+local checkInterval = 2
+
+-- History graph data
+local graphTop = 14
+local graphBottom = H - 6
+local graphHeight = graphBottom - graphTop
+local graphLeft = 3
+local graphRight = W - 2
+local graphWidth = graphRight - graphLeft
+local history = {}
+
+-- Button layout (computed from screen width)
+local buttonY = H - 2
+local buttonWidth = math.floor((W - 10) / 3)
+local btn1X = 2
+local btn2X = btn1X + buttonWidth + 2
+local btn3X = btn2X + buttonWidth + 2
+
+local function drawButton(x, y, width, text, bg)
+  mon.setBackgroundColor(bg)
+  mon.setCursorPos(x, y)
+  mon.write(string.rep(" ", width))
+  mon.setCursorPos(x + math.floor((width - #text) / 2), y)
+  mon.write(text)
+  mon.setBackgroundColor(colors.black)
+end
+
+local function drawBar(x, y, width, percent, fillColor)
+  if percent > 100 then percent = 100 end
+  if percent < 0 then percent = 0 end
+  local filled = math.floor(width * percent / 100)
+  mon.setCursorPos(x, y)
+  mon.setBackgroundColor(fillColor)
+  mon.write(string.rep(" ", filled))
+  mon.setBackgroundColor(colors.gray)
+  mon.write(string.rep(" ", width - filled))
+  mon.setBackgroundColor(colors.black)
+end
+
+local function colorForPercent(p)
+  if p < 30 then return colors.red
+  elseif p < 70 then return colors.yellow
+  else return colors.green end
+end
+
+local function autoControl()
+  if not autoEnabled then return end
+  local energy = r.getEnergyStored()
+  local percent = energy / maxEnergy * 100
+  if percent > 100 then percent = 100 end
+  if percent < 0 then percent = 0 end
+
+  if previousPercent == nil then
+    previousPercent = percent
+    return
+  end
+
+  local errorAmt = percent - targetPercent
+  local rate = percent - previousPercent
+  previousPercent = percent
+
+  local adjustment = kp * errorAmt + kd * rate
+  local step = math.floor(adjustment + 0.5)
+
+  local cap = normalCap
+  if percent < dangerThreshold and rate < 0 then
+    cap = dangerCap
+  end
+
+  local current = r.getControlRodLevel(0)
+
+  if step > 0 and current >= sensitiveZoneStart then
+    local roomLeft = 100 - current
+    local scaledCap = math.max(1, math.floor(roomLeft / 4))
+    if scaledCap < cap then cap = scaledCap end
+  end
+
+  if step > cap then step = cap end
+  if step < -cap then step = -cap end
+
+  if step ~= 0 then
+    local newLevel = current + step
+    if newLevel > 100 then newLevel = 100 end
+    if newLevel < 0 then newLevel = 0 end
+    r.setAllControlRodLevels(newLevel)
+  end
+end
+
+local function recordHistory()
+  local energy = r.getEnergyStored()
+  local percent = math.floor(energy / maxEnergy * 100)
+  table.insert(history, percent)
+  while #history > graphWidth do
+    table.remove(history, 1)
+  end
+end
+
+local function drawGraph()
+  -- Frame
+  mon.setTextColor(colors.white)
+  mon.setCursorPos(2, graphTop - 1)
+  mon.write("Energy History")
+
+  for gx = 1, #history do
+    local val = history[gx]
+    local rowOffset = math.floor((graphHeight - 1) * val / 100)
+    local y = graphBottom - rowOffset
+    mon.setCursorPos(graphLeft + gx - 1, y)
+    mon.setBackgroundColor(colorForPercent(val))
+    mon.write(" ")
+    mon.setBackgroundColor(colors.black)
+  end
+end
+
+local function draw()
+  mon.setBackgroundColor(colors.black)
+  mon.clear()
+  mon.setTextColor(colors.white)
+
+  local temp = r.getFuelTemperature()
+  local fuel = r.getFuelAmount()
+  local fuelMax = r.getFuelAmountMax()
+  local energy = r.getEnergyStored()
+  local gen = r.getEnergyProducedLastTick()
+  local active = r.getActive()
+  local rod = r.getControlRodLevel(0)
+
+  local fuelPct = math.floor(fuel / fuelMax * 100)
+  local energyPct = math.floor(energy / maxEnergy * 100)
+
+  -- Title
+  mon.setCursorPos(2, 1)
+  mon.setTextColor(colors.cyan)
+  mon.write("REACTOR CONTROL")
+
+  mon.setCursorPos(W - 10, 1)
+  if active then
+    mon.setTextColor(colors.lime)
+    mon.write("  ACTIVE")
+  else
+    mon.setTextColor(colors.red)
+    mon.write("SHUTDOWN")
+  end
+
+  mon.setTextColor(colors.gray)
+  for x = 1, W do
+    mon.setCursorPos(x, 2)
+    mon.write("-")
+  end
+  mon.setTextColor(colors.white)
+
+  -- Stats
+  mon.setCursorPos(2, 4)
+  mon.write("Temp: " .. math.floor(temp) .. " C     Gen: " .. math.floor(gen) .. " RF/t")
+
+  mon.setCursorPos(2, 6)
+  mon.write("Fuel   ")
+  drawBar(9, 6, W - 15, fuelPct, colors.orange)
+  mon.setCursorPos(W - 5, 6)
+  mon.write(fuelPct .. "%")
+
+  mon.setCursorPos(2, 8)
+  mon.write("Energy ")
+  drawBar(9, 8, W - 15, energyPct, colors.blue)
+  mon.setCursorPos(W - 5, 8)
+  mon.write(energyPct .. "%")
+
+  mon.setCursorPos(2, 10)
+  mon.write("Rods   ")
+  drawBar(9, 10, W - 15, rod, colors.purple)
+  mon.setCursorPos(W - 5, 10)
+  mon.write(rod .. "%")
+
+  mon.setTextColor(colors.gray)
+  for x = 1, W do
+    mon.setCursorPos(x, 12)
+    mon.write("-")
+  end
+  mon.setTextColor(colors.white)
+
+  drawGraph()
+
+  mon.setTextColor(colors.gray)
+  for x = 1, W do
+    mon.setCursorPos(x, buttonY - 1)
+    mon.write("-")
+  end
+
+  drawButton(btn1X, buttonY, buttonWidth, "START", colors.green)
+  drawButton(btn2X, buttonY, buttonWidth, "STOP", colors.red)
+  if autoEnabled then
+    drawButton(btn3X, buttonY, buttonWidth, "AUTO:ON", colors.blue)
+  else
+    drawButton(btn3X, buttonY, buttonWidth, "AUTO:OFF", colors.gray)
+  end
+end
+
+draw()
+os.startTimer(checkInterval)
+
+while true do
+  local event, side, x, y = os.pullEvent()
+  if event == "monitor_touch" and y == buttonY then
+    if x >= btn1X and x <= btn1X + buttonWidth then
+      r.setActive(true)
+    elseif x >= btn2X and x <= btn2X + buttonWidth then
+      r.setActive(false)
+    elseif x >= btn3X and x <= btn3X + buttonWidth then
+      autoEnabled = not autoEnabled
+    end
+    draw()
+  elseif event == "timer" then
+    autoControl()
+    recordHistory()
+    draw()
+    os.startTimer(checkInterval)
+  end
+end
