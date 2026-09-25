@@ -17,6 +17,9 @@ mon.setTextScale(1)
 
 local W, H = mon.getSize()
 
+-- Below this size, drop the history graph and tighten spacing
+local compactMode = (W < 45 or H < 16)
+
 local maxEnergy = 10000000
 local autoEnabled = true
 local targetPercent = 75
@@ -31,21 +34,24 @@ local sensitiveZoneStart = 70
 
 local checkInterval = 2
 
--- History graph data
-local graphTop = 14
-local graphBottom = H - 6
-local graphHeight = graphBottom - graphTop
-local graphLeft = 3
-local graphRight = W - 2
-local graphWidth = graphRight - graphLeft
-local history = {}
-
--- Button layout (computed from screen width)
+-- Layout, computed differently depending on mode
 local buttonY = H - 2
 local buttonWidth = math.floor((W - 10) / 3)
 local btn1X = 2
 local btn2X = btn1X + buttonWidth + 2
 local btn3X = btn2X + buttonWidth + 2
+
+local graphTop, graphBottom, graphHeight, graphLeft, graphRight, graphWidth
+local history = {}
+
+if not compactMode then
+  graphTop = 14
+  graphBottom = H - 6
+  graphHeight = graphBottom - graphTop
+  graphLeft = 3
+  graphRight = W - 2
+  graphWidth = graphRight - graphLeft
+end
 
 local function drawButton(x, y, width, text, bg)
   mon.setBackgroundColor(bg)
@@ -118,6 +124,7 @@ local function autoControl()
 end
 
 local function recordHistory()
+  if compactMode then return end
   local energy = r.getEnergyStored()
   local percent = math.floor(energy / maxEnergy * 100)
   table.insert(history, percent)
@@ -127,7 +134,6 @@ local function recordHistory()
 end
 
 local function drawGraph()
-  -- Frame
   mon.setTextColor(colors.white)
   mon.setCursorPos(2, graphTop - 1)
   mon.write("Energy History")
@@ -159,15 +165,14 @@ local function draw()
   local fuelPct = math.floor(fuel / fuelMax * 100)
   local energyPct = math.floor(energy / maxEnergy * 100)
 
-  -- Title
   mon.setCursorPos(2, 1)
   mon.setTextColor(colors.cyan)
   mon.write("REACTOR CONTROL")
 
-  mon.setCursorPos(W - 10, 1)
+  mon.setCursorPos(math.max(2, W - 10), 1)
   if active then
     mon.setTextColor(colors.lime)
-    mon.write("  ACTIVE")
+    mon.write("ACTIVE")
   else
     mon.setTextColor(colors.red)
     mon.write("SHUTDOWN")
@@ -180,36 +185,53 @@ local function draw()
   end
   mon.setTextColor(colors.white)
 
-  -- Stats
-  mon.setCursorPos(2, 4)
-  mon.write("Temp: " .. math.floor(temp) .. " C     Gen: " .. math.floor(gen) .. " RF/t")
+  if compactMode then
+    -- Tight layout: no graph, no RF/t line, just the essentials
+    mon.setCursorPos(2, 4)
+    mon.write("Temp: " .. math.floor(temp) .. "C")
 
-  mon.setCursorPos(2, 6)
-  mon.write("Fuel   ")
-  drawBar(9, 6, W - 15, fuelPct, colors.orange)
-  mon.setCursorPos(W - 5, 6)
-  mon.write(fuelPct .. "%")
+    mon.setCursorPos(2, 6)
+    mon.write("Fuel ")
+    drawBar(8, 6, W - 12, fuelPct, colors.orange)
 
-  mon.setCursorPos(2, 8)
-  mon.write("Energy ")
-  drawBar(9, 8, W - 15, energyPct, colors.blue)
-  mon.setCursorPos(W - 5, 8)
-  mon.write(energyPct .. "%")
+    mon.setCursorPos(2, 7)
+    mon.write("Enrg ")
+    drawBar(8, 7, W - 12, energyPct, colors.blue)
 
-  mon.setCursorPos(2, 10)
-  mon.write("Rods   ")
-  drawBar(9, 10, W - 15, rod, colors.purple)
-  mon.setCursorPos(W - 5, 10)
-  mon.write(rod .. "%")
+    mon.setCursorPos(2, 8)
+    mon.write("Rods ")
+    drawBar(8, 8, W - 12, rod, colors.purple)
+  else
+    mon.setCursorPos(2, 4)
+    mon.write("Temp: " .. math.floor(temp) .. " C     Gen: " .. math.floor(gen) .. " RF/t")
 
-  mon.setTextColor(colors.gray)
-  for x = 1, W do
-    mon.setCursorPos(x, 12)
-    mon.write("-")
+    mon.setCursorPos(2, 6)
+    mon.write("Fuel   ")
+    drawBar(9, 6, W - 15, fuelPct, colors.orange)
+    mon.setCursorPos(W - 5, 6)
+    mon.write(fuelPct .. "%")
+
+    mon.setCursorPos(2, 8)
+    mon.write("Energy ")
+    drawBar(9, 8, W - 15, energyPct, colors.blue)
+    mon.setCursorPos(W - 5, 8)
+    mon.write(energyPct .. "%")
+
+    mon.setCursorPos(2, 10)
+    mon.write("Rods   ")
+    drawBar(9, 10, W - 15, rod, colors.purple)
+    mon.setCursorPos(W - 5, 10)
+    mon.write(rod .. "%")
+
+    mon.setTextColor(colors.gray)
+    for x = 1, W do
+      mon.setCursorPos(x, 12)
+      mon.write("-")
+    end
+    mon.setTextColor(colors.white)
+
+    drawGraph()
   end
-  mon.setTextColor(colors.white)
-
-  drawGraph()
 
   mon.setTextColor(colors.gray)
   for x = 1, W do
