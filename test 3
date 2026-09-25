@@ -17,14 +17,16 @@ mon.setTextScale(1)
 
 local maxEnergy = 10000000
 local autoEnabled = true
-local maxStepCap = 6
 local targetPercent = 75
 local kp = 0.25
 local kd = 1.2
 local previousPercent = nil
 
-local drawInterval = 2     -- seconds between screen refreshes
-local controlInterval = 8  -- seconds between rod adjustments (let the reactor actually respond first)
+local normalCap = 5     -- max % change per cycle during normal drift
+local dangerCap = 15    -- max % change per cycle when falling fast toward empty
+local dangerThreshold = 35  -- below this %, allow bigger emergency corrections
+
+local checkInterval = 2  -- seconds between control checks (fast enough to react)
 
 local function drawButton(x, y, width, text, bg)
   mon.setBackgroundColor(bg)
@@ -53,8 +55,15 @@ local function autoControl()
 
   local adjustment = kp * errorAmt + kd * rate
   local step = math.floor(adjustment + 0.5)
-  if step > maxStepCap then step = maxStepCap end
-  if step < -maxStepCap then step = -maxStepCap end
+
+  -- Allow a bigger emergency step only if we're low AND still falling
+  local cap = normalCap
+  if percent < dangerThreshold and rate < 0 then
+    cap = dangerCap
+  end
+
+  if step > cap then step = cap end
+  if step < -cap then step = -cap end
 
   if step ~= 0 then
     local current = r.getControlRodLevel(0)
@@ -111,11 +120,10 @@ local function draw()
 end
 
 draw()
-local drawTimer = os.startTimer(drawInterval)
-local controlTimer = os.startTimer(controlInterval)
+os.startTimer(checkInterval)
 
 while true do
-  local event, a, x, y = os.pullEvent()
+  local event, side, x, y = os.pullEvent()
   if event == "monitor_touch" and y == 12 then
     if x >= 2 and x <= 11 then
       r.setActive(true)
@@ -126,12 +134,8 @@ while true do
     end
     draw()
   elseif event == "timer" then
-    if a == drawTimer then
-      draw()
-      drawTimer = os.startTimer(drawInterval)
-    elseif a == controlTimer then
-      autoControl()
-      controlTimer = os.startTimer(controlInterval)
-    end
+    autoControl()
+    draw()
+    os.startTimer(checkInterval)
   end
 end
