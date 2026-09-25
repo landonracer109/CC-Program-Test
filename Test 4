@@ -17,10 +17,16 @@ mon.setTextScale(1)
 
 local maxEnergy = 10000000
 local autoEnabled = true
+local targetPercent = 75
+local kp = 0.25
+local kd = 1.2
+local previousPercent = nil
 
-local shutdownAt = 90   -- fully deactivate above this %, stop burning fuel entirely
-local restartAt = 70    -- reactivate once it drops back below this %
-local baseRodLevel = 30 -- rod level to run at whenever active (keeps output well away from the crash zone)
+local normalCap = 5
+local dangerCap = 15
+local dangerThreshold = 35
+
+local sensitiveZoneStart = 70  -- rod levels above this get increasingly cautious steps
 
 local checkInterval = 2
 
@@ -37,14 +43,45 @@ local function autoControl()
   if not autoEnabled then return end
   local energy = r.getEnergyStored()
   local percent = energy / maxEnergy * 100
+  if percent > 100 then percent = 100 end
+  if percent < 0 then percent = 0 end
 
-  if percent >= shutdownAt then
-    r.setActive(false)
-  elseif percent <= restartAt then
-    r.setActive(true)
-    r.setAllControlRodLevels(baseRodLevel)
+  if previousPercent == nil then
+    previousPercent = percent
+    return
   end
-  -- else: between the two thresholds, leave it alone, whatever state it's already in
+
+  local errorAmt = percent - targetPercent
+  local rate = percent - previousPercent
+  previousPercent = percent
+
+  local adjustment = kp * errorAmt + kd * rate
+  local step = math.floor(adjustment + 0.5)
+
+  local cap = normalCap
+  if percent < dangerThreshold and rate < 0 then
+    cap = dangerCap
+  end
+
+  local current = r.getControlRodLevel(0)
+
+  -- Only when INCREASING rod level while already in the sensitive zone,
+  -- shrink the allowed step the closer we get to 100
+  if step > 0 and current >= sensitiveZoneStart then
+    local roomLeft = 100 - current           -- how much headroom remains before max
+    local scaledCap = math.max(1, math.floor(roomLeft / 4))
+    if scaledCap < cap then cap = scaledCap end
+  end
+
+  if step > cap then step = cap end
+  if step < -cap then step = -cap end
+
+  if step ~= 0 then
+    local newLevel = current + step
+    if newLevel > 100 then newLevel = 100 end
+    if newLevel < 0 then newLevel = 0 end
+    r.setAllControlRodLevels(newLevel)
+  end
 end
 
 local function draw()
