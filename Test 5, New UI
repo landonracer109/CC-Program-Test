@@ -34,13 +34,14 @@ local sensitiveZoneStart = 70
 
 local checkInterval = 2
 
--- Layout, computed differently depending on mode
+-- Button layout (computed from screen width)
 local buttonY = H - 2
 local buttonWidth = math.floor((W - 10) / 3)
 local btn1X = 2
 local btn2X = btn1X + buttonWidth + 2
 local btn3X = btn2X + buttonWidth + 2
 
+-- History graph data (only used in full mode)
 local graphTop, graphBottom, graphHeight, graphLeft, graphRight, graphWidth
 local history = {}
 
@@ -186,7 +187,6 @@ local function draw()
   mon.setTextColor(colors.white)
 
   if compactMode then
-    -- Tight layout: no graph, no RF/t line, just the essentials
     mon.setCursorPos(2, 4)
     mon.write("Temp: " .. math.floor(temp) .. "C")
 
