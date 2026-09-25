@@ -15,6 +15,9 @@ if mon == nil then error("No monitor found") end
 
 mon.setTextScale(1)
 
+local maxEnergy = 10000000
+local autoEnabled = true
+
 local function drawButton(x, y, width, text, bg)
   mon.setBackgroundColor(bg)
   mon.setCursorPos(x, y)
@@ -22,6 +25,15 @@ local function drawButton(x, y, width, text, bg)
   mon.setCursorPos(x + math.floor((width - #text) / 2), y)
   mon.write(text)
   mon.setBackgroundColor(colors.black)
+end
+
+local function autoControl()
+  if not autoEnabled then return end
+  local energy = r.getEnergyStored()
+  local percent = math.floor(energy / maxEnergy * 100)
+  if percent > 100 then percent = 100 end
+  if percent < 0 then percent = 0 end
+  r.setAllControlRodLevels(percent)
 end
 
 local function draw()
@@ -59,8 +71,14 @@ local function draw()
     mon.write("SHUTDOWN")
   end
   mon.setTextColor(colors.white)
+
   drawButton(2, 12, 10, "START", colors.green)
   drawButton(14, 12, 10, "STOP", colors.red)
+  if autoEnabled then
+    drawButton(26, 12, 10, "AUTO: ON", colors.blue)
+  else
+    drawButton(26, 12, 10, "AUTO: OFF", colors.gray)
+  end
 end
 
 draw()
@@ -73,9 +91,12 @@ while true do
       r.setActive(true)
     elseif x >= 14 and x <= 23 then
       r.setActive(false)
+    elseif x >= 26 and x <= 35 then
+      autoEnabled = not autoEnabled
     end
     draw()
   elseif event == "timer" then
+    autoControl()
     draw()
     os.startTimer(2)
   end
