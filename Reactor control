@@ -1,0 +1,61 @@
+local function wrapThis(name)
+  local w, i = nil, 0
+  while w == nil and i <= 100 do
+    w = peripheral.wrap(name.."_"..i)
+    i = i + 1
+  end
+  return w
+end
+
+local r = wrapThis("BigReactors-Reactor")
+if r == nil then error("No reactor found") end
+
+local mon = peripheral.wrap("right")
+if mon == nil then error("No monitor found") end
+
+mon.setTextScale(1)
+
+local function drawButton(x, y, width, text, bg)
+  mon.setBackgroundColor(bg)
+  mon.setCursorPos(x, y)
+  mon.write(string.rep(" ", width))
+  mon.setCursorPos(x + math.floor((width - #text) / 2), y)
+  mon.write(text)
+  mon.setBackgroundColor(colors.black)
+end
+
+local function draw()
+  mon.setBackgroundColor(colors.black)
+  mon.clear()
+  mon.setTextColor(colors.white)
+
+  local temp = r.getFuelTemperature()
+  local fuel = r.getFuelAmount()
+  local fuelMax = r.getFuelAmountMax()
+  local energy = r.getEnergyStored()
+  local gen = r.getEnergyProducedLastTick()
+  local active = r.getActive()
+  local rod = r.getControlRodLevel(0)
+
+  mon.setCursorPos(2, 2)
+  mon.write("Reactor Status")
+  mon.setCursorPos(2, 4)
+  mon.write("Temp: " .. math.floor(temp) .. " C")
+  mon.setCursorPos(2, 5)
+  mon.write("Fuel: " .. math.floor(fuel / fuelMax * 100) .. "%")
+  mon.setCursorPos(2, 6)
+  mon.write("Energy: " .. energy .. " RF")
+  mon.setCursorPos(2, 7)
+  mon.write("Gen: " .. math.floor(gen) .. " RF/t")
+  mon.setCursorPos(2, 8)
+  mon.write("Rods: " .. rod .. "%")
+
+  mon.setCursorPos(2, 10)
+  if active then
+    mon.setTextColor(colors.lime)
+    mon.write("ACTIVE")
+  else
+    mon.setTextColor(colors.red)
+    mon.write("SHUTDOWN")
+  end
+  mon.setTextColor(colors.white)
