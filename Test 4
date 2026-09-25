@@ -1,0 +1,114 @@
+local function wrapThis(name)
+  local w, i = nil, 0
+  while w == nil and i <= 100 do
+    w = peripheral.wrap(name.."_"..i)
+    i = i + 1
+  end
+  return w
+end
+
+local r = wrapThis("BigReactors-Reactor")
+if r == nil then error("No reactor found") end
+
+local mon = peripheral.wrap("right")
+if mon == nil then error("No monitor found") end
+
+mon.setTextScale(1)
+
+local maxEnergy = 10000000
+local autoEnabled = true
+
+local shutdownAt = 90   -- fully deactivate above this %, stop burning fuel entirely
+local restartAt = 70    -- reactivate once it drops back below this %
+local baseRodLevel = 30 -- rod level to run at whenever active (keeps output well away from the crash zone)
+
+local checkInterval = 2
+
+local function drawButton(x, y, width, text, bg)
+  mon.setBackgroundColor(bg)
+  mon.setCursorPos(x, y)
+  mon.write(string.rep(" ", width))
+  mon.setCursorPos(x + math.floor((width - #text) / 2), y)
+  mon.write(text)
+  mon.setBackgroundColor(colors.black)
+end
+
+local function autoControl()
+  if not autoEnabled then return end
+  local energy = r.getEnergyStored()
+  local percent = energy / maxEnergy * 100
+
+  if percent >= shutdownAt then
+    r.setActive(false)
+  elseif percent <= restartAt then
+    r.setActive(true)
+    r.setAllControlRodLevels(baseRodLevel)
+  end
+  -- else: between the two thresholds, leave it alone, whatever state it's already in
+end
+
+local function draw()
+  mon.setBackgroundColor(colors.black)
+  mon.clear()
+  mon.setTextColor(colors.white)
+
+  local temp = r.getFuelTemperature()
+  local fuel = r.getFuelAmount()
+  local fuelMax = r.getFuelAmountMax()
+  local energy = r.getEnergyStored()
+  local gen = r.getEnergyProducedLastTick()
+  local active = r.getActive()
+  local rod = r.getControlRodLevel(0)
+
+  mon.setCursorPos(2, 2)
+  mon.write("Reactor Status")
+  mon.setCursorPos(2, 4)
+  mon.write("Temp: " .. math.floor(temp) .. " C")
+  mon.setCursorPos(2, 5)
+  mon.write("Fuel: " .. math.floor(fuel / fuelMax * 100) .. "%")
+  mon.setCursorPos(2, 6)
+  mon.write("Energy: " .. energy .. " RF")
+  mon.setCursorPos(2, 7)
+  mon.write("Gen: " .. math.floor(gen) .. " RF/t")
+  mon.setCursorPos(2, 8)
+  mon.write("Rods: " .. rod .. "%")
+
+  mon.setCursorPos(2, 10)
+  if active then
+    mon.setTextColor(colors.lime)
+    mon.write("ACTIVE")
+  else
+    mon.setTextColor(colors.red)
+    mon.write("SHUTDOWN")
+  end
+  mon.setTextColor(colors.white)
+
+  drawButton(2, 12, 10, "START", colors.green)
+  drawButton(14, 12, 10, "STOP", colors.red)
+  if autoEnabled then
+    drawButton(26, 12, 10, "AUTO: ON", colors.blue)
+  else
+    drawButton(26, 12, 10, "AUTO: OFF", colors.gray)
+  end
+end
+
+draw()
+os.startTimer(checkInterval)
+
+while true do
+  local event, side, x, y = os.pullEvent()
+  if event == "monitor_touch" and y == 12 then
+    if x >= 2 and x <= 11 then
+      r.setActive(true)
+    elseif x >= 14 and x <= 23 then
+      r.setActive(false)
+    elseif x >= 26 and x <= 35 then
+      autoEnabled = not autoEnabled
+    end
+    draw()
+  elseif event == "timer" then
+    autoControl()
+    draw()
+    os.startTimer(checkInterval)
+  end
+end
