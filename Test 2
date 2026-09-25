@@ -17,7 +17,11 @@ mon.setTextScale(1)
 
 local maxEnergy = 10000000
 local autoEnabled = true
-local maxStepCap = 8  -- absolute max % rod change allowed in a single cycle, even at extremes
+local maxStepCap = 6      -- absolute max % rod change per cycle
+local targetPercent = 75  -- the energy level we're trying to hold steady at
+local kp = 0.25           -- how hard we react to being off-target
+local kd = 1.8            -- how hard we react to the trend (this is the key damping term)
+local previousPercent = nil
 
 local function drawButton(x, y, width, text, bg)
   mon.setBackgroundColor(bg)
@@ -35,18 +39,26 @@ local function autoControl()
   if percent > 100 then percent = 100 end
   if percent < 0 then percent = 0 end
 
-  local current = r.getControlRodLevel(0)
-  local target = percent
-  local delta = target - current
-  local absDelta = math.abs(delta)
+  if previousPercent == nil then
+    previousPercent = percent
+    return  -- first run, nothing to compare against yet
+  end
 
-  -- Step size grows with how far off we are, but is always capped
-  local step = math.min(math.max(1, math.floor(absDelta / 3)), maxStepCap)
+  local errorAmt = percent - targetPercent   -- positive = too much energy stored
+  local rate = percent - previousPercent     -- positive = energy still climbing
+  previousPercent = percent
 
-  if delta > 0 then
-    r.setAllControlRodLevels(math.min(current + step, 100))
-  elseif delta < 0 then
-    r.setAllControlRodLevels(math.max(current - step, 0))
+  local adjustment = kp * errorAmt + kd * rate
+  local step = math.floor(adjustment + 0.5)  -- round to nearest whole %
+  if step > maxStepCap then step = maxStepCap end
+  if step < -maxStepCap then step = -maxStepCap end
+
+  if step ~= 0 then
+    local current = r.getControlRodLevel(0)
+    local newLevel = current + step
+    if newLevel > 100 then newLevel = 100 end
+    if newLevel < 0 then newLevel = 0 end
+    r.setAllControlRodLevels(newLevel)
   end
 end
 
@@ -96,7 +108,7 @@ local function draw()
 end
 
 draw()
-os.startTimer(1)
+os.startTimer(2)
 
 while true do
   local event, side, x, y = os.pullEvent()
@@ -112,6 +124,6 @@ while true do
   elseif event == "timer" then
     autoControl()
     draw()
-    os.startTimer(1)
+    os.startTimer(2)
   end
 end
