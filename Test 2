@@ -17,9 +17,7 @@ mon.setTextScale(1)
 
 local maxEnergy = 10000000
 local autoEnabled = true
-local maxStep = 1        -- max % rod change per cycle
-local upperThreshold = 90 -- above this %, push rods in (reduce power)
-local lowerThreshold = 60 -- below this %, pull rods out (increase power)
+local maxStepCap = 8  -- absolute max % rod change allowed in a single cycle, even at extremes
 
 local function drawButton(x, y, width, text, bg)
   mon.setBackgroundColor(bg)
@@ -33,15 +31,23 @@ end
 local function autoControl()
   if not autoEnabled then return end
   local energy = r.getEnergyStored()
-  local percent = math.floor(energy / maxEnergy * 100)
-  local current = r.getControlRodLevel(0)
+  local percent = energy / maxEnergy * 100
+  if percent > 100 then percent = 100 end
+  if percent < 0 then percent = 0 end
 
-  if percent > upperThreshold then
-    r.setAllControlRodLevels(math.min(current + maxStep, 100))
-  elseif percent < lowerThreshold then
-    r.setAllControlRodLevels(math.max(current - maxStep, 0))
+  local current = r.getControlRodLevel(0)
+  local target = percent
+  local delta = target - current
+  local absDelta = math.abs(delta)
+
+  -- Step size grows with how far off we are, but is always capped
+  local step = math.min(math.max(1, math.floor(absDelta / 3)), maxStepCap)
+
+  if delta > 0 then
+    r.setAllControlRodLevels(math.min(current + step, 100))
+  elseif delta < 0 then
+    r.setAllControlRodLevels(math.max(current - step, 0))
   end
-  -- else: within the comfortable band, hold steady, no change
 end
 
 local function draw()
@@ -90,7 +96,7 @@ local function draw()
 end
 
 draw()
-os.startTimer(2)
+os.startTimer(1)
 
 while true do
   local event, side, x, y = os.pullEvent()
@@ -106,6 +112,6 @@ while true do
   elseif event == "timer" then
     autoControl()
     draw()
-    os.startTimer(2)
+    os.startTimer(1)
   end
 end
