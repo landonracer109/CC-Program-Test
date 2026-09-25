@@ -59,3 +59,24 @@ local function draw()
     mon.write("SHUTDOWN")
   end
   mon.setTextColor(colors.white)
+  drawButton(2, 12, 10, "START", colors.green)
+  drawButton(14, 12, 10, "STOP", colors.red)
+end
+
+draw()
+os.startTimer(2)
+
+while true do
+  local event, side, x, y = os.pullEvent()
+  if event == "monitor_touch" and y == 12 then
+    if x >= 2 and x <= 11 then
+      r.setActive(true)
+    elseif x >= 14 and x <= 23 then
+      r.setActive(false)
+    end
+    draw()
+  elseif event == "timer" then
+    draw()
+    os.startTimer(2)
+  end
+end
