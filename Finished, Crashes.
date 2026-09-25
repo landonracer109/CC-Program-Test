@@ -141,6 +141,8 @@ local function recordHistory()
   end
 end
 
+-- Precompute each column's fill height and color once per draw,
+-- then draw row-by-row, batching consecutive same-color cells into one write call.
 local function drawGraph()
   mon.setTextColor(colors.white)
   mon.setCursorPos(2, graphTop - 1)
@@ -159,19 +161,40 @@ local function drawGraph()
     mon.write("|")
   end
 
-  for gx = 1, #history do
-    local val = history[gx]
-    local barColor = colorForPercent(val)
-    local rowOffset = math.floor((graphHeight - 1) * val / 100)
-    local topY = graphBottom - rowOffset
+  local n = #history
+  if n == 0 then return end
 
-    for y = graphBottom, topY, -1 do
-      mon.setCursorPos(graphLeft + gx - 1, y)
-      mon.setBackgroundColor(barColor)
-      mon.write(" ")
-    end
-    mon.setBackgroundColor(colors.black)
+  -- Precompute top row (the row above which this column is empty) and color for each column
+  local colTop = {}
+  local colColor = {}
+  for gx = 1, n do
+    local val = history[gx]
+    local rowOffset = math.floor((graphHeight - 1) * val / 100)
+    colTop[gx] = graphBottom - rowOffset
+    colColor[gx] = colorForPercent(val)
   end
+
+  for y = graphTop, graphBottom do
+    local gx = 1
+    while gx <= n do
+      local filled = (y >= colTop[gx])
+      if filled then
+        local runColor = colColor[gx]
+        local runStart = gx
+        gx = gx + 1
+        while gx <= n and (y >= colTop[gx]) and colColor[gx] == runColor do
+          gx = gx + 1
+        end
+        local runLength = gx - runStart
+        mon.setCursorPos(graphLeft + runStart - 1, y)
+        mon.setBackgroundColor(runColor)
+        mon.write(string.rep(" ", runLength))
+      else
+        gx = gx + 1
+      end
+    end
+  end
+  mon.setBackgroundColor(colors.black)
 end
 
 local function draw()
@@ -270,26 +293,35 @@ local function draw()
   else
     drawButton(btn3X, buttonY, buttonWidth, "AUTO:OFF", colors.gray)
   end
+
+  sleep(0)  -- force a yield after every draw, regardless of how much was drawn
 end
 
 draw()
 os.startTimer(checkInterval)
 
-while true do
-  local event, side, x, y = os.pullEvent()
-  if event == "monitor_touch" and y == buttonY then
-    if x >= btn1X and x <= btn1X + buttonWidth then
-      r.setActive(true)
-    elseif x >= btn2X and x <= btn2X + buttonWidth then
-      r.setActive(false)
-    elseif x >= btn3X and x <= btn3X + buttonWidth then
-      autoEnabled = not autoEnabled
+local ok, err = pcall(function()
+  while true do
+    local event, side, x, y = os.pullEvent()
+    if event == "monitor_touch" and y == buttonY then
+      if x >= btn1X and x <= btn1X + buttonWidth then
+        r.setActive(true)
+      elseif x >= btn2X and x <= btn2X + buttonWidth then
+        r.setActive(false)
+      elseif x >= btn3X and x <= btn3X + buttonWidth then
+        autoEnabled = not autoEnabled
+      end
+      draw()
+    elseif event == "timer" then
+      autoControl()
+      recordHistory()
+      draw()
+      os.startTimer(checkInterval)
     end
-    draw()
-  elseif event == "timer" then
-    autoControl()
-    recordHistory()
-    draw()
-    os.startTimer(checkInterval)
   end
+end)
+
+if not ok then
+  term.setCursorPos(1, 1)
+  print("Program stopped: " .. tostring(err))
 end
