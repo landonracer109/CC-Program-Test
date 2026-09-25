@@ -46,7 +46,7 @@ if not compactMode then
   graphTop = 14
   graphBottom = H - 6
   graphHeight = graphBottom - graphTop
-  graphLeft = 7   -- shifted right to leave room for the % scale labels
+  graphLeft = 7
   graphRight = W - 2
   graphWidth = graphRight - graphLeft
 end
@@ -73,13 +73,19 @@ local function drawBar(x, y, width, percent, fillColor)
 end
 
 local function colorForPercent(p)
-  if p < 30 then return colors.red
-  elseif p < 70 then return colors.yellow
-  else return colors.green end
+  if p < 30 then
+    return colors.red
+  elseif p < 70 then
+    return colors.yellow
+  else
+    return colors.green
+  end
 end
 
 local function autoControl()
-  if not autoEnabled then return end
+  if not autoEnabled then
+    return
+  end
   local energy = r.getEnergyStored()
   local percent = energy / maxEnergy * 100
   if percent > 100 then percent = 100 end
@@ -107,7 +113,9 @@ local function autoControl()
   if step > 0 and current >= sensitiveZoneStart then
     local roomLeft = 100 - current
     local scaledCap = math.max(1, math.floor(roomLeft / 4))
-    if scaledCap < cap then cap = scaledCap end
+    if scaledCap < cap then
+      cap = scaledCap
+    end
   end
 
   if step > cap then step = cap end
@@ -122,7 +130,9 @@ local function autoControl()
 end
 
 local function recordHistory()
-  if compactMode then return end
+  if compactMode then
+    return
+  end
   local energy = r.getEnergyStored()
   local percent = math.floor(energy / maxEnergy * 100)
   table.insert(history, percent)
@@ -136,7 +146,6 @@ local function drawGraph()
   mon.setCursorPos(2, graphTop - 1)
   mon.write("Energy History (Stored %)")
 
-  -- Y-axis scale labels: 100 at top, 50 in middle, 0 at bottom
   mon.setTextColor(colors.gray)
   mon.setCursorPos(2, graphTop)
   mon.write("100")
@@ -145,7 +154,6 @@ local function drawGraph()
   mon.setCursorPos(4, graphBottom)
   mon.write("0")
 
-  -- Vertical axis line
   for y = graphTop, graphBottom do
     mon.setCursorPos(graphLeft - 1, y)
     mon.write("|")
